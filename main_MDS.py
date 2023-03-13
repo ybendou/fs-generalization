@@ -21,13 +21,10 @@ def generate_normal_data(means, covariance, N=1000, use_multivariate=False):
     data = torch.zeros(means.shape[0], N, means.shape[-1])
     for i, mu in enumerate(means):
         cov = covariance[i]
-        if use_multivariate and means.shape[-1]>1:
+        if use_multivariate:
             data[i] = torch.tensor(np.random.multivariate_normal(mu.cpu(), cov.cpu(), N))
         else:
-            if means.shape[-1]==1:
-                data[i] = torch.randn(N, means.shape[-1])*cov+mu
-            else:
-                data[i] = torch.randn(N, means.shape[-1])@cov+mu
+            data[i] = torch.randn(N, means.shape[-1])@cov+mu
     return data
 def return_error(data, means):
     """
@@ -197,15 +194,14 @@ def DavisBouldinIndex(centroids, clusters):
     C = torch.stack([max([(S[i]+ S[j]/M[i,j]) for j in range(K) if j!=i]) for i in range(K)]).mean()
     return C
 
-def main(n_runs, c, maxK, N_dims, bessel_correction, generator, features, mapping, unbalanced_queries=False, device='cuda:0', mds=False):
+def main(n_runs, c, maxK, N_dims, bessel_correction, generator, features, mapping, unbalanced_queries=False):
     measure = torch.zeros(n_runs, maxK, 12)
     min_size = min([features[c]['features'].shape[0] for c in range(len(features))])
     for i in tqdm(range(n_runs)):
         episode = generator.sample_episode(ways=c, n_shots=1, n_queries=min_size, unbalanced_queries=unbalanced_queries)
         _, queries = generator.get_features_from_indices(features, episode)
         for k, K in enumerate(range(1, maxK+1)):
-            if mds:
-                mds = MDS(dissimilarity='precomputed', random_state=0, n_components=c-1)
+            mds = MDS(dissimilarity='precomputed', random_state=0, n_components=c-1)
             k_shot_points = [queries[c_][:K] for c_ in range(c)]
             query_points = [queries[c_][maxK+1:] for c_ in range(c)]
             # measure statistics
@@ -256,12 +252,12 @@ def main(n_runs, c, maxK, N_dims, bessel_correction, generator, features, mappin
                 adjusting_ratio = torch.tensor(interpolate_bias(estimated_SNR.numpy(), K, mapping)).abs()
                 corrected_distance = estimated_distance*adjusting_ratio
                 corrected_distances[c1, c2] = corrected_distance
-            if mds:
-                corrected_distances = corrected_distances + corrected_distances.T
-                corrected_centroids = torch.tensor(mds.fit_transform(corrected_distances)).float()
-            else:
-                target_distances = get_value_upper(corrected_distances)
-                corrected_centroids = gradient_descent_ClosedForm(qr_estimated_centroids, torch.clip(target_distances, 0), verbose=False, trainCfg={'lr':0.01, 'mmt':0.8, 'n_iter':100, 'loss_amp':1}, device=device) # Retrieve new centroids 
+
+            corrected_distances = corrected_distances + corrected_distances.T
+            corrected_centroids = torch.tensor(mds.fit_transform(corrected_distances)).float() # Retrieve new centroids
+            #target_distances = get_value_upper(corrected_distances)
+            #corrected_centroids = gradient_descent_ClosedForm(qr_estimated_centroids, torch.clip(target_distances, 0), verbose=False, trainCfg={'lr':0.01, 'mmt':0.8, 'n_iter':100, 'loss_amp':1}) # Retrieve new centroids 
+            
             measure[i][k][0] = true_error # true acc in N_dims 
             measure[i][k][1] = return_error(qr_queries, qr_estimated_centroids) # true acc in QR space
             measure[i][k][2] = predict_error(qr_centroids_queries, qr_covariances_queries) # If we know all the queries in QR
@@ -328,9 +324,9 @@ if __name__ == '__main__':
     parser.add_argument("--config-validation", type=str, default='', help="Load validation configuration")
     parser.add_argument("--maxK", type=int, default=20, help="max number of shots in the few shot runs")
     parser.add_argument("--load-config", type=str, default='', help="Load pre-computed configuration")
-    parser.add_argument("--mds", type=str, default="False", help="Multidimensional scaling to reconstruct the points from a matrix of distances, if False uses Gradient Descent")
 
     args = process_arguments(parser=parser)
+    print(args)
     if args.wandb:
         import wandb
     dataset = args.dataset
@@ -369,7 +365,7 @@ if __name__ == '__main__':
     if args.load_config:
         measure = torch.load(args.load_config)
     else:
-        measure = main(n_runs, c, maxK, N_dims, bessel_correction, generator, features, mapping, unbalanced_queries=unbalanced, device=args.device, mds=bool(args.mds))
+        measure = main(n_runs, c, maxK, N_dims, bessel_correction, generator, features, mapping, unbalanced_queries=unbalanced)
     if args.validation:
         measure_validation = measure
         
