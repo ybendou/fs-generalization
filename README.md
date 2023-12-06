@@ -1,6 +1,6 @@
 # A Statistical Model for Predicting Generalization in Few-Shot Classification
 
-Official implementation for "A Statistical Model for Predicting Generalization in Few-Shot Classification" accepted at EUSIPCO 2023
+Official implementation for "A Statistical Model for Predicting Generalization in Few-Shot Classification" accepted at EUSIPCO 2023.
 
 To run the code for different datasets, first download the features. We use the features proposed in the article https://arxiv.org/pdf/2201.09699.pdf which can be downloaded from the following [link](https://drive.google.com/drive/folders/1fALYAfzStWXasI-DTl6qi9moNuWbFA-j) and can be put in the the folder "features".
 
